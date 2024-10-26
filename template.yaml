@@ -1,0 +1,70 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  email-forwarding
+
+Transform:
+  - AWS::Serverless-2016-10-31
+
+Resources:
+  EmailProcessingTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: forward-ses-to-gmail
+
+  EmailForwardingFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/handler.handler
+      Runtime: nodejs20.x
+      Architectures:
+        - x86_64
+      MemorySize: 128
+      Timeout: 100
+      Environment:
+        Variables:
+          SES_EMAIL: !Ref SESEmailParameter
+          GMAIL_EMAIL: !Ref GmailEmailParameter
+      Description: A Lambda function that forwards emails from a SES verified email address to a Gmail address.
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: "Allow"
+              Action:
+                - "s3:GetObject"
+              Resource: !Sub "arn:aws:s3:::${EmailBucketParameter}/*"
+            - Effect: "Allow"
+              Action:
+                - "ses:SendRawEmail"
+              Resource: "*"
+            - Effect: "Allow"
+              Action:
+                - "sns:Subscribe"
+                - "sns:Receive"
+              Resource: !Ref EmailProcessingTopic
+      Events:
+        SNSNotification:
+          Type: SNS
+          Properties:
+            Topic: !Ref EmailProcessingTopic
+Outputs:
+  EmailForwardingFunctionArn:
+    Description: "ARN of the Email Forwarding Lambda Function"
+    Value: !GetAtt EmailForwardingFunction.Arn
+  EmailProcessingTopicArn:
+    Description: "ARN of the Email Processing SNS Topic"
+    Value: !Ref EmailProcessingTopic
+
+Parameters:
+  SESEmailParameter:
+    Type: String
+    Description: "The SES verified email address to forward from"
+    Default: "your-ses-verified-domain@example.com"
+  GmailEmailParameter:
+    Type: String
+    Description: "The Gmail address to forward to"
+    Default: "your-destination@gmail.com"
+  EmailBucketParameter:
+    Type: String
+    Description: "The S3 bucket where emails will be stored"
+    Default: "your-email-bucket-name"
